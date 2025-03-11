@@ -28,7 +28,7 @@ Configure our network
 '''
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,7'
 criteria_fusion = Fusionloss()
 model_str = 'CDDFuse'
 
@@ -38,7 +38,7 @@ epoch_gap = 40  # epoches of Phase I
 
 lr = 1e-4
 weight_decay = 0
-batch_size = 8
+batch_size = 24
 GPU_number = os.environ['CUDA_VISIBLE_DEVICES']
 # Coefficients of the loss function
 coeff_mse_loss_VF = 1. # alpha1
@@ -79,7 +79,7 @@ Loss_ssim = kornia.losses.SSIM(11, reduction='mean')
 
 
 # data loader
-trainloader = DataLoader(H5Dataset(r"data/MSRS_train_imgsize_128_stride_200.h5"),
+trainloader = DataLoader(H5Dataset("/mnt/storage/wjh/shy/data_h5/MSRS_train_imgsize_128_stride_200.h5"),
                          batch_size=batch_size,
                          shuffle=True,
                          num_workers=0)

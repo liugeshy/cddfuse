@@ -43,11 +43,11 @@ data_name="MSRS_train"
 img_size=128   #patch size
 stride=200     #patch stride
 
-IR_files = sorted(get_img_file(r"MSRS_train/ir"))
-VIS_files   = sorted(get_img_file(r"MSRS_train/vi"))
+IR_files = sorted(get_img_file("/mnt/storage/wjh/shy/MSRS_train/ir"))
+VIS_files   = sorted(get_img_file("/mnt/storage/wjh/shy/MSRS_train/vi"))
 
 assert len(IR_files) == len(VIS_files)
-h5f = h5py.File(os.path.join('.\\data',
+h5f = h5py.File(os.path.join('/mnt/storage/wjh/shy/data_h5',
                                  data_name+'_imgsize_'+str(img_size)+"_stride_"+str(stride)+'.h5'), 
                     'w')
 h5_ir = h5f.create_group('ir_patchs')
@@ -80,7 +80,7 @@ for i in tqdm(range(len(IR_files))):
 
 h5f.close()
 
-with h5py.File(os.path.join('data',
+with h5py.File(os.path.join('data_h5',
                                  data_name+'_imgsize_'+str(img_size)+"_stride_"+str(stride)+'.h5'),"r") as f:
     for key in f.keys():
         print(f[key], key, f[key].name) 

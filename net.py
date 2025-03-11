@@ -5,7 +5,47 @@ import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from einops import rearrange
+from Scconv import ScConv
 
+class N:
+    @staticmethod
+    def init_weights(layer, init_type='kaiming'):
+        if init_type == 'kaiming':
+            nn.init.kaiming_normal_(layer.weight, mode='fan_in', nonlinearity='relu')
+
+class ResidualBlockNoBN2(nn.Module):
+    def __init__(self, in_channels=1,mid_channels=64, res_scale=1):
+        super().__init__()
+        self.res_scale = res_scale
+        self.conv1 = nn.Conv2d(in_channels, mid_channels, 3, 1, 1, bias=True)
+        self.conv2 = nn.Conv2d(mid_channels, mid_channels, 3, 1, 1, bias=True)
+        self.scconv1 = ScConv(mid_channels)
+        self.scconv2 = ScConv(mid_channels)
+
+        self.relu = nn.ReLU(inplace=True)
+
+        if in_channels != mid_channels:
+            self.identity_conv = nn.Conv2d(in_channels, mid_channels, 1, 1, 0, bias=True)
+        else:
+            self.identity_conv = None
+
+        self.init_weights()
+
+    def init_weights(self):
+        N.init_weights(self.conv1, init_type='kaiming')
+        N.init_weights(self.conv2, init_type='kaiming')
+        self.conv1.weight.data *= 0.1
+        self.conv2.weight.data *= 0.1
+
+    def forward(self, x):
+        
+        if self.identity_conv is not None:
+            identity = self.identity_conv(x)
+        else:
+            identity = x
+        out = self.scconv2(self.conv2(self.scconv1(self.relu(self.conv1(x)))))
+        return identity + out * self.res_scale
+    
 
 def drop_path(x, drop_prob: float = 0., training: bool = False):
     """
@@ -338,7 +378,7 @@ class Restormer_Encoder(nn.Module):
                  inp_channels=1,
                  out_channels=1,
                  dim=64,
-                 num_blocks=[4, 4],
+                 num_blocks=[2, 4],
                  heads=[8, 8, 8],
                  ffn_expansion_factor=2,
                  bias=False,
@@ -349,6 +389,7 @@ class Restormer_Encoder(nn.Module):
 
         self.patch_embed = OverlapPatchEmbed(inp_channels, dim)
 
+        self.encoder_level2 = nn.Sequential(*[ResidualBlockNoBN2(in_channels=dim, mid_channels=dim) for _ in range(2)])
         self.encoder_level1 = nn.Sequential(*[TransformerBlock(dim=dim, num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor,
                                             bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[0])])
         self.baseFeature = BaseFeatureExtraction(dim=dim, num_heads = heads[2])
@@ -356,7 +397,8 @@ class Restormer_Encoder(nn.Module):
              
     def forward(self, inp_img):
         inp_enc_level1 = self.patch_embed(inp_img)
-        out_enc_level1 = self.encoder_level1(inp_enc_level1)
+        out_enc_level2=self.encoder_level2(inp_enc_level1)
+        out_enc_level1 = self.encoder_level1(out_enc_level2)
         base_feature = self.baseFeature(out_enc_level1)
         detail_feature = self.detailFeature(out_enc_level1)
         return base_feature, detail_feature, out_enc_level1
@@ -385,7 +427,7 @@ class Restormer_Decoder(nn.Module):
                       stride=1, padding=1, bias=bias),)
         self.sigmoid = nn.Sigmoid()              
     def forward(self, inp_img, base_feature, detail_feature):
-        out_enc_level0 = torch.cat((base_feature, detail_feature), dim=1)
+        out_enc_level0 = torch.cat((base_feature, detail_feature), dim=1)#提取到的全局特征和局部特征直接cat
         out_enc_level0 = self.reduce_channel(out_enc_level0)
         out_enc_level1 = self.encoder_level2(out_enc_level0)
         if inp_img is not None:
