@@ -18,4 +18,6 @@ def img_save(image,imagename,savepath):
     if not os.path.exists(savepath):
         os.makedirs(savepath)
     # Gray_pic
+    image = image.astype(np.uint8)
+    
     imsave(os.path.join(savepath, "{}.png".format(imagename)),image)

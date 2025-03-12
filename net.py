@@ -6,7 +6,27 @@ import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from einops import rearrange
 from Scconv import ScConv
+from HFDB import UN
+from HFDB import UNet
+from dense import Dense
+from HFDB import HPB
+class FeatureExtraction(nn.Module):
+    def __init__(self,in_channels=64,wave='db1',n_feats=64):
+        super(FeatureExtraction,self).__init__()
+        self.unet=UNet(in_channels,wave)
+        self.down=nn.AvgPool2d(kernel_size=2)
+        self.un=UN(n_feats)
+        self.dense=Dense(n_feats)
+        self.hpb=HPB(n_feats,wave)
+    def forward(self,x):
+        ex=self.hpb(x)
+        low=self.down(ex)
+        high = x - F.interpolate(low, size=x.size()[-2:], mode='bilinear', align_corners=True)
+        lowf=self.unet(low)
+        highfeat = self.dense(high)
+        lowfeat = F.interpolate(lowf, size=x.size()[-2:], mode='bilinear', align_corners=True)
 
+        return highfeat,lowfeat
 class N:
     @staticmethod
     def init_weights(layer, init_type='kaiming'):
@@ -394,13 +414,14 @@ class Restormer_Encoder(nn.Module):
                                             bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[0])])
         self.baseFeature = BaseFeatureExtraction(dim=dim, num_heads = heads[2])
         self.detailFeature = DetailFeatureExtraction()
-             
+        self.Feature=FeatureExtraction()     
     def forward(self, inp_img):
         inp_enc_level1 = self.patch_embed(inp_img)
         out_enc_level2=self.encoder_level2(inp_enc_level1)
         out_enc_level1 = self.encoder_level1(out_enc_level2)
-        base_feature = self.baseFeature(out_enc_level1)
-        detail_feature = self.detailFeature(out_enc_level1)
+        #base_feature = self.baseFeature(out_enc_level1)
+        #detail_feature = self.detailFeature(out_enc_level1)
+        detail_feature,base_feature=self.Feature(out_enc_level1)
         return base_feature, detail_feature, out_enc_level1
 
 class Restormer_Decoder(nn.Module):

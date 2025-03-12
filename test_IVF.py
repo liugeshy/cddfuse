@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.CRITICAL)
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-ckpt_path=r"models/CDDFuse_IVF.pth"
+ckpt_path=r"models/CDDFuse_03-12-11-28.pth"
 for dataset_name in ["TNO","RoadScene"]:
     print("\n"*2+"="*80)
     model_name="CDDFuse    "

@@ -80,7 +80,7 @@ for i in tqdm(range(len(IR_files))):
 
 h5f.close()
 
-with h5py.File(os.path.join('data_h5',
+with h5py.File(os.path.join('/mnt/storage/wjh/shy/data_h5',
                                  data_name+'_imgsize_'+str(img_size)+"_stride_"+str(stride)+'.h5'),"r") as f:
     for key in f.keys():
         print(f[key], key, f[key].name) 
