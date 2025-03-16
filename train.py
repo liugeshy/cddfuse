@@ -28,17 +28,17 @@ Configure our network
 '''
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,7'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,2,4,5'
 criteria_fusion = Fusionloss()
 model_str = 'CDDFuse'
 
 # . Set the hyper-parameters for training
-num_epochs = 120 # total epoch
-epoch_gap = 40  # epoches of Phase I 
+num_epochs = 400 # total epoch
+epoch_gap = 300  # epoches of Phase I 
 
 lr = 1e-4
 weight_decay = 0
-batch_size = 24
+batch_size = 40
 GPU_number = os.environ['CUDA_VISIBLE_DEVICES']
 # Coefficients of the loss function
 coeff_mse_loss_VF = 1. # alpha1
@@ -99,7 +99,7 @@ prev_time = time.time()
 
 for epoch in range(num_epochs):
     ''' train '''
-    for i, (data_VIS, data_IR) in enumerate(loader['train']):
+    for i, (data_VIS, data_IR,data_VIS2,data_IR2) in enumerate(loader['train']):
         data_VIS, data_IR = data_VIS.cuda(), data_IR.cuda()
         DIDF_Encoder.train()
         DIDF_Decoder.train()
@@ -117,10 +117,10 @@ for epoch in range(num_epochs):
         optimizer4.zero_grad()
 
         if epoch < epoch_gap: #Phase I
-            feature_V_B, feature_V_D, _ = DIDF_Encoder(data_VIS)
-            feature_I_B, feature_I_D, _ = DIDF_Encoder(data_IR)
-            data_VIS_hat, _ = DIDF_Decoder(data_VIS, feature_V_B, feature_V_D)
-            data_IR_hat, _ = DIDF_Decoder(data_IR, feature_I_B, feature_I_D)
+            feature_V_B, feature_V_D, _ = DIDF_Encoder(data_VIS2)
+            feature_I_B, feature_I_D, _ = DIDF_Encoder(data_IR2)
+            data_VIS_hat, _ = DIDF_Decoder(data_VIS2, feature_V_B, feature_V_D)
+            data_IR_hat, _ = DIDF_Decoder(data_IR2, feature_I_B, feature_I_D)
 
             cc_loss_B = cc(feature_V_B, feature_I_B)
             cc_loss_D = cc(feature_V_D, feature_I_D)
@@ -129,11 +129,16 @@ for epoch in range(num_epochs):
 
             Gradient_loss = L1Loss(kornia.filters.SpatialGradient()(data_VIS),
                                    kornia.filters.SpatialGradient()(data_VIS_hat))
-
+            L1loss_V=10*L1Loss(data_VIS,data_VIS_hat)
+            L1loss_I=10*L1Loss(data_IR,data_IR_hat)
+            mse_loss_V2=5 * Loss_ssim(data_VIS, data_VIS_hat)+L1loss_V
+            mse_loss_I2=5 * Loss_ssim(data_IR, data_IR_hat)+L1loss_I
             loss_decomp =  (cc_loss_D) ** 2/ (1.01 + cc_loss_B)  
 
-            loss = coeff_mse_loss_VF * mse_loss_V + coeff_mse_loss_IF * \
-                   mse_loss_I + coeff_decomp * loss_decomp + coeff_tv * Gradient_loss
+            #loss = coeff_mse_loss_VF * mse_loss_V + coeff_mse_loss_IF * \
+                   #mse_loss_I + coeff_decomp * loss_decomp + coeff_tv * Gradient_loss
+            
+            loss = coeff_mse_loss_VF *mse_loss_V2 + coeff_mse_loss_IF*mse_loss_I2 + coeff_decomp * loss_decomp
 
             loss.backward()
             nn.utils.clip_grad_norm_(
@@ -143,6 +148,13 @@ for epoch in range(num_epochs):
             optimizer1.step()  
             optimizer2.step()
         else:  #Phase II
+            DIDF_Encoder.eval()
+            DIDF_Decoder.eval()
+
+            for param in DIDF_Encoder.parameters():
+                param.requires_grad = False
+            for param in DIDF_Decoder.parameters():
+                param.requires_grad = False
             feature_V_B, feature_V_D, feature_V = DIDF_Encoder(data_VIS)
             feature_I_B, feature_I_D, feature_I = DIDF_Encoder(data_IR)
             feature_F_B = BaseFuseLayer(feature_I_B+feature_V_B)
@@ -160,16 +172,16 @@ for epoch in range(num_epochs):
             
             loss = fusionloss + coeff_decomp * loss_decomp
             loss.backward()
-            nn.utils.clip_grad_norm_(
-                DIDF_Encoder.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
-            nn.utils.clip_grad_norm_(
-                DIDF_Decoder.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
+            #nn.utils.clip_grad_norm_(
+                #DIDF_Encoder.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
+            #nn.utils.clip_grad_norm_(
+                #DIDF_Decoder.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
             nn.utils.clip_grad_norm_(
                 BaseFuseLayer.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
             nn.utils.clip_grad_norm_(
                 DetailFuseLayer.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
-            optimizer1.step()  
-            optimizer2.step()
+            #optimizer1.step()  
+            #optimizer2.step()
             optimizer3.step()
             optimizer4.step()
 
@@ -189,11 +201,22 @@ for epoch in range(num_epochs):
                 time_left,
             )
         )
-
+    with open('training_log.txt', 'a') as f:
+        f.write(
+            "[Epoch %d/%d] [Batch %d/%d] [loss: %f] ETA: %.10s\n"
+            % (
+                epoch ,
+                num_epochs,
+                i ,
+                len(loader['train']),
+                loss.item(),
+                time_left,
+            )
+        )
     # adjust the learning rate
-
-    scheduler1.step()  
-    scheduler2.step()
+    if epoch<epoch_gap:
+        scheduler1.step()  
+        scheduler2.step()
     if not epoch < epoch_gap:
         scheduler3.step()
         scheduler4.step()

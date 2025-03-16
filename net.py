@@ -18,9 +18,10 @@ class FeatureExtraction(nn.Module):
         self.un=UN(n_feats)
         self.dense=Dense(n_feats)
         self.hpb=HPB(n_feats,wave)
+        self.res=ResidualBlockNoBN2(in_channels,in_channels,1)
     def forward(self,x):
-        ex=self.hpb(x)
-        low=self.down(ex)
+
+        low=self.down(x)
         high = x - F.interpolate(low, size=x.size()[-2:], mode='bilinear', align_corners=True)
         lowf=self.unet(low)
         highfeat = self.dense(high)
@@ -398,7 +399,7 @@ class Restormer_Encoder(nn.Module):
                  inp_channels=1,
                  out_channels=1,
                  dim=64,
-                 num_blocks=[2, 4],
+                 num_blocks=[4, 4],
                  heads=[8, 8, 8],
                  ffn_expansion_factor=2,
                  bias=False,
@@ -408,21 +409,30 @@ class Restormer_Encoder(nn.Module):
         super(Restormer_Encoder, self).__init__()
 
         self.patch_embed = OverlapPatchEmbed(inp_channels, dim)
-
-        self.encoder_level2 = nn.Sequential(*[ResidualBlockNoBN2(in_channels=dim, mid_channels=dim) for _ in range(2)])
-        self.encoder_level1 = nn.Sequential(*[TransformerBlock(dim=dim, num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor,
-                                            bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[0])])
+        self.un=UN(n_feats=64)
+        self.encoder_level2 = nn.Sequential(*[ResidualBlockNoBN2(in_channels=dim, mid_channels=dim) for _ in range(1)])
+        #self.encoder_level1 = nn.Sequential(*[TransformerBlock(dim=dim, num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor,
+                                            #bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[0])])
         self.baseFeature = BaseFeatureExtraction(dim=dim, num_heads = heads[2])
         self.detailFeature = DetailFeatureExtraction()
-        self.Feature=FeatureExtraction()     
+        self.Feature=FeatureExtraction()
+        self.hpb=HPB(n_feats=64,wave='db1')     
     def forward(self, inp_img):
         inp_enc_level1 = self.patch_embed(inp_img)
         out_enc_level2=self.encoder_level2(inp_enc_level1)
-        out_enc_level1 = self.encoder_level1(out_enc_level2)
+        out_enc_level3=self.hpb(out_enc_level2)
+        out_enc_level4=self.encoder_level2(out_enc_level3+out_enc_level2)
+        out_enc_level5=self.hpb(out_enc_level4)
+        out_enc_level6=self.encoder_level2(out_enc_level5+out_enc_level2)
+        out_enc_level7=self.hpb(out_enc_level6)
+        #out_enc_level1=self.un(out_enc_level2)
+        #out_enc_level1=out_enc_level2+out_enc_level1
+        #out_enc_level1 = self.encoder_level1(out_enc_level2)
+        out_enc_level8=self.encoder_level2(out_enc_level7+out_enc_level2)
         #base_feature = self.baseFeature(out_enc_level1)
         #detail_feature = self.detailFeature(out_enc_level1)
-        detail_feature,base_feature=self.Feature(out_enc_level1)
-        return base_feature, detail_feature, out_enc_level1
+        detail_feature,base_feature=self.Feature(out_enc_level8)
+        return base_feature, detail_feature, out_enc_level5
 
 class Restormer_Decoder(nn.Module):
     def __init__(self,

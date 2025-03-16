@@ -11,8 +11,8 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.CRITICAL)
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-ckpt_path=r"models/CDDFuse_03-12-11-28.pth"
-for dataset_name in ["TNO","RoadScene"]:
+ckpt_path=r"models/CDDFuse_03-15-15-20.pth"
+for dataset_name in ["TNO","RoadScene","TNO_noise","RoadScene_noise"]:
     print("\n"*2+"="*80)
     model_name="CDDFuse    "
     print("The test result of "+dataset_name+' :')
