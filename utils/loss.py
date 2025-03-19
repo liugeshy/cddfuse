@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-
+import kornia
+MSELoss = nn.MSELoss()  
+L1Loss = nn.L1Loss()
+Loss_ssim = kornia.losses.SSIM(11, reduction='mean')
 
 class Fusionloss(nn.Module):
     def __init__(self):
@@ -18,9 +20,22 @@ class Fusionloss(nn.Module):
         generate_img_grad=self.sobelconv(generate_img)
         x_grad_joint=torch.max(y_grad,ir_grad)
         loss_grad=F.l1_loss(x_grad_joint,generate_img_grad)
-        loss_total=loss_in+10*loss_grad
+        #loss_total=loss_in+10*loss_grad
+        mse_loss_V=MSELoss(image_vis, generate_img)
+        mse_loss_I=MSELoss(image_ir,generate_img)
+        loss_total=mse_loss_V+mse_loss_I
+        print(loss_total)
         return loss_total,loss_in,loss_grad
+class Fusionloss2(nn.Module):
+    def __init__(self):
+        super(Fusionloss2,self).__init__()
+    
+    def forward(self,image_vis,image_ir,generate_img):
 
+        mse_loss_V = 5 * Loss_ssim(image_vis, generate_img) + 10*MSELoss(image_vis, generate_img)
+        mse_loss_I = 5 * Loss_ssim(image_ir, generate_img) + 10*MSELoss(image_ir, generate_img)
+        loss_total=mse_loss_V+mse_loss_I
+        return loss_total 
 class Sobelxy(nn.Module):
     def __init__(self):
         super(Sobelxy, self).__init__()

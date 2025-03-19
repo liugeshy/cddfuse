@@ -10,6 +10,16 @@ from HFDB import UN
 from HFDB import UNet
 from dense import Dense
 from HFDB import HPB
+
+class DetailFeatureExtraction2(nn.Module):
+    def __init__(self, n_feats=64):
+        super(DetailFeatureExtraction2,self).__init__()
+        self.dense=Dense(n_feats)
+    def forward(self,x):
+        lowfea=self.dense(x)
+        return lowfea
+    
+
 class FeatureExtraction(nn.Module):
     def __init__(self,in_channels=64,wave='db1',n_feats=64):
         super(FeatureExtraction,self).__init__()
@@ -235,6 +245,7 @@ class DetailFeatureExtraction(nn.Module):
         for layer in self.net:
             z1, z2 = layer(z1, z2)
         return torch.cat((z1, z2), dim=1)
+
 
 # =============================================================================
 

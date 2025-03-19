@@ -1,4 +1,4 @@
-from net import Restormer_Encoder, Restormer_Decoder, BaseFeatureExtraction, DetailFeatureExtraction
+from net import Restormer_Encoder, Restormer_Decoder, BaseFeatureExtraction, DetailFeatureExtraction,DetailFeatureExtraction2
 import os
 import numpy as np
 from utils.Evaluator import Evaluator
@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.CRITICAL)
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-ckpt_path=r"models/CDDFuse_03-15-15-20.pth"
+ckpt_path=r"models/CDDFuse_03-17-22-21.pth"
 for dataset_name in ["TNO","RoadScene","TNO_noise","RoadScene_noise"]:
     print("\n"*2+"="*80)
     model_name="CDDFuse    "
@@ -23,7 +23,8 @@ for dataset_name in ["TNO","RoadScene","TNO_noise","RoadScene_noise"]:
     Encoder = nn.DataParallel(Restormer_Encoder()).to(device)
     Decoder = nn.DataParallel(Restormer_Decoder()).to(device)
     BaseFuseLayer = nn.DataParallel(BaseFeatureExtraction(dim=64, num_heads=8)).to(device)
-    DetailFuseLayer = nn.DataParallel(DetailFeatureExtraction(num_layers=1)).to(device)
+    #DetailFuseLayer = nn.DataParallel(DetailFeatureExtraction(num_layers=1)).to(device)
+    DetailFuseLayer = nn.DataParallel(DetailFeatureExtraction2()).to(device)
 
     Encoder.load_state_dict(torch.load(ckpt_path)['DIDF_Encoder'])
     Decoder.load_state_dict(torch.load(ckpt_path)['DIDF_Decoder'])
@@ -45,8 +46,12 @@ for dataset_name in ["TNO","RoadScene","TNO_noise","RoadScene_noise"]:
 
             feature_V_B, feature_V_D, feature_V = Encoder(data_VIS)
             feature_I_B, feature_I_D, feature_I = Encoder(data_IR)
+            #feature_F_B,_ = Encoder(feature_I_B+feature_V_B)
+            #feature_F_D,_ = Encoder(feature_V_D+feature_I_D)
             feature_F_B = BaseFuseLayer(feature_V_B + feature_I_B)
             feature_F_D = DetailFuseLayer(feature_V_D + feature_I_D)
+            feature_F_B=feature_V_B+feature_I_B
+            feature_F_D=feature_V_D+feature_I_D
             data_Fuse, _ = Decoder(data_VIS, feature_F_B, feature_F_D)
             data_Fuse=(data_Fuse-torch.min(data_Fuse))/(torch.max(data_Fuse)-torch.min(data_Fuse))
             fi = np.squeeze((data_Fuse * 255).cpu().numpy())
