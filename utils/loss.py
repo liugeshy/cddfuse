@@ -24,7 +24,7 @@ class Fusionloss(nn.Module):
         mse_loss_V=MSELoss(image_vis, generate_img)
         mse_loss_I=MSELoss(image_ir,generate_img)
         loss_total=mse_loss_V+mse_loss_I
-        print(loss_total)
+        #print(loss_total)
         return loss_total,loss_in,loss_grad
 class Fusionloss2(nn.Module):
     def __init__(self):

@@ -18,7 +18,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from utils.loss import Fusionloss, cc,Fusionloss2
 import kornia
-
+from pytorch_msssim import ms_ssim
 
 
 '''
@@ -34,12 +34,12 @@ criteria_fusion2 = Fusionloss2()
 model_str = 'CDDFuse'
 
 # . Set the hyper-parameters for training
-num_epochs = 60 # total epoch
-epoch_gap = 0  # epoches of Phase I 
+num_epochs = 120 # total epoch
+epoch_gap = 60  # epoches of Phase I 
 
-loaded_phase1 = True
+loaded_phase1 = False
 
-lr = 1e-5
+lr = 1e-3
 weight_decay = 0
 batch_size = 20
 GPU_number = os.environ['CUDA_VISIBLE_DEVICES']
@@ -71,11 +71,14 @@ optimizer3 = torch.optim.Adam(
     BaseFuseLayer.parameters(), lr=lr, weight_decay=weight_decay)
 optimizer4 = torch.optim.Adam(
     DetailFuseLayer.parameters(), lr=lr, weight_decay=weight_decay)
+optimizer5 = torch.optim.Adam(
+    FuseLayer.parameters(), lr=lr, weight_decay=weight_decay)
 
 scheduler1 = torch.optim.lr_scheduler.StepLR(optimizer1, step_size=optim_step, gamma=optim_gamma)
 scheduler2 = torch.optim.lr_scheduler.StepLR(optimizer2, step_size=optim_step, gamma=optim_gamma)
 scheduler3 = torch.optim.lr_scheduler.StepLR(optimizer3, step_size=optim_step, gamma=optim_gamma)
 scheduler4 = torch.optim.lr_scheduler.StepLR(optimizer4, step_size=optim_step, gamma=optim_gamma)
+scheduler5 = torch.optim.lr_scheduler.StepLR(optimizer5, step_size=optim_step, gamma=optim_gamma)
 
 MSELoss = nn.MSELoss()  
 L1Loss = nn.L1Loss()
@@ -120,18 +123,21 @@ for epoch in range(num_epochs):
         data_VIS, data_IR = data_VIS.cuda(), data_IR.cuda()
         DIDF_Encoder.train()
         DIDF_Decoder.train()
-        BaseFuseLayer.train()
-        DetailFuseLayer.train()
+        # BaseFuseLayer.train()
+        # DetailFuseLayer.train()
+        FuseLayer.train()
 
         DIDF_Encoder.zero_grad()
         DIDF_Decoder.zero_grad()
-        BaseFuseLayer.zero_grad()
-        DetailFuseLayer.zero_grad()
-
+        # BaseFuseLayer.zero_grad()
+        # DetailFuseLayer.zero_grad()
+        FuseLayer.zero_grad()
+    
         optimizer1.zero_grad()
         optimizer2.zero_grad()
         optimizer3.zero_grad()
         optimizer4.zero_grad()
+        optimizer5.zero_grad()
 
         if epoch < epoch_gap: #Phase I
             feature_V_B, feature_V_D, _ = DIDF_Encoder(data_VIS2)
@@ -157,8 +163,9 @@ for epoch in range(num_epochs):
                    #mse_loss_I + coeff_decomp * loss_decomp + coeff_tv * Gradient_loss
             
             #loss = coeff_mse_loss_VF *mse_loss_V2 + coeff_mse_loss_IF*mse_loss_I2 + coeff_decomp * loss_decomp
-            loss=10*(MSELoss(data_VIS, data_VIS_hat)+MSELoss(data_IR, data_IR_hat))
-
+            loss = 100*(MSELoss(data_VIS, data_VIS_hat) + MSELoss(data_IR, data_IR_hat)) + 100*coeff_decomp * loss_decomp
+            print("mseloss:",100*(MSELoss(data_VIS, data_VIS_hat) + MSELoss(data_IR, data_IR_hat)))
+            print("decomploss:",loss_decomp)
             loss.backward()
             nn.utils.clip_grad_norm_(
                 DIDF_Encoder.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
@@ -197,8 +204,8 @@ for epoch in range(num_epochs):
             loss_decomp =   (cc_loss_D) ** 2 / (1.01 + cc_loss_B)  
             fusionloss, _,_  = criteria_fusion(VIS_hat, IR_hat, data_Fuse)
             #fusionloss=criteria_fusion2(data_VIS, data_IR, data_Fuse)
-            #loss = fusionloss + coeff_decomp * loss_decomp+L1loss_V_hat+L1loss_I_hat
-            loss = 10*fusionloss
+            #loss = fusionloss + coeff_decomp * loss_decomp + L1loss_V_hat+L1loss_I_hat
+            loss = fusionloss + coeff_decomp * loss_decomp
             loss.backward()
             # nn.utils.clip_grad_norm_(
             #     DIDF_Encoder.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
@@ -208,11 +215,13 @@ for epoch in range(num_epochs):
                 BaseFuseLayer.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
             nn.utils.clip_grad_norm_(
                 DetailFuseLayer.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
+            nn.utils.clip_grad_norm_(
+                FuseLayer.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
             # optimizer1.step()  
             # optimizer2.step()
             optimizer3.step()
             optimizer4.step()
-
+            optimizer5.step()
         # Determine approximate time left
         batches_done = epoch * len(loader['train']) + i
         batches_left = num_epochs * len(loader['train']) - batches_done
@@ -259,6 +268,7 @@ for epoch in range(num_epochs):
     if not epoch < epoch_gap:
         scheduler3.step()
         scheduler4.step()
+        scheduler5.step()
 
     if optimizer1.param_groups[0]['lr'] <= 1e-6:
         optimizer1.param_groups[0]['lr'] = 1e-6
@@ -268,7 +278,8 @@ for epoch in range(num_epochs):
         optimizer3.param_groups[0]['lr'] = 1e-6
     if optimizer4.param_groups[0]['lr'] <= 1e-6:
         optimizer4.param_groups[0]['lr'] = 1e-6
-    
+    if optimizer5.param_groups[0]['lr'] <= 1e-6:
+        optimizer5.param_groups[0]['lr'] = 1e-6
 if True:
     checkpoint = {
         'DIDF_Encoder': DIDF_Encoder.state_dict(),
