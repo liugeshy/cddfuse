@@ -63,9 +63,16 @@ for dataset_name in ["TNO","RoadScene","TNO_noise","RoadScene_noise"]:
 
     metric_result = np.zeros((8))
     for img_name in os.listdir(os.path.join(ori_img_folder,"ir")):
+            fi = image_read_cv2(os.path.join(eval_folder, img_name.split('.')[0]+".png"), 'GRAY')
+        #     if "_noise" in ori_img_folder:
+        #         ori_img_folder = ori_img_folder.replace("_noise", "")
+        #         print("处理后的文件夹路径:", ori_img_folder)
+        #     if "_sigma15" in img_name:
+        #          img_name = img_name.replace("_sigma15","")
+        #          print("处理后的图片名：",img_name)
             ir = image_read_cv2(os.path.join(ori_img_folder,"ir", img_name), 'GRAY')
             vi = image_read_cv2(os.path.join(ori_img_folder,"vi", img_name), 'GRAY')
-            fi = image_read_cv2(os.path.join(eval_folder, img_name.split('.')[0]+".png"), 'GRAY')
+            
             metric_result += np.array([Evaluator.EN(fi), Evaluator.SD(fi)
                                         , Evaluator.SF(fi), Evaluator.MI(fi, ir, vi)
                                         , Evaluator.SCD(fi, ir, vi), Evaluator.VIFF(fi, ir, vi)

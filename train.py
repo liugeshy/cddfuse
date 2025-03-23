@@ -18,7 +18,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from utils.loss import Fusionloss, cc,Fusionloss2
 import kornia
-from pytorch_msssim import ms_ssim
+from pytorch_msssim import ssim
 
 
 '''
@@ -34,10 +34,10 @@ criteria_fusion2 = Fusionloss2()
 model_str = 'CDDFuse'
 
 # . Set the hyper-parameters for training
-num_epochs = 120 # total epoch
-epoch_gap = 60  # epoches of Phase I 
+num_epochs = 60 # total epoch
+epoch_gap = 0  # epoches of Phase I 
 
-loaded_phase1 = False
+loaded_phase1 = True
 
 lr = 1e-3
 weight_decay = 0
@@ -163,9 +163,12 @@ for epoch in range(num_epochs):
                    #mse_loss_I + coeff_decomp * loss_decomp + coeff_tv * Gradient_loss
             
             #loss = coeff_mse_loss_VF *mse_loss_V2 + coeff_mse_loss_IF*mse_loss_I2 + coeff_decomp * loss_decomp
-            loss = 100*(MSELoss(data_VIS, data_VIS_hat) + MSELoss(data_IR, data_IR_hat)) + 100*coeff_decomp * loss_decomp
-            print("mseloss:",100*(MSELoss(data_VIS, data_VIS_hat) + MSELoss(data_IR, data_IR_hat)))
-            print("decomploss:",loss_decomp)
+            print(data_VIS.size())
+            msssim_loss = (1-ssim(data_VIS,data_VIS_hat,data_range=1, size_average=True))+(1-ssim(data_IR,data_IR_hat,data_range=1, size_average=True))
+            loss = 100*(MSELoss(data_VIS, data_VIS_hat) + MSELoss(data_IR, data_IR_hat)) + 100*coeff_decomp * loss_decomp+msssim_loss
+            # print("mseloss:",100*(MSELoss(data_VIS, data_VIS_hat) + MSELoss(data_IR, data_IR_hat)))
+            # print("decomploss:",loss_decomp)
+            # print("ms_loss:",msssim_loss)
             loss.backward()
             nn.utils.clip_grad_norm_(
                 DIDF_Encoder.parameters(), max_norm=clip_grad_norm_value, norm_type=2)
